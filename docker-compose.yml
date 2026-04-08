@@ -1,0 +1,97 @@
+services:
+  ldap:
+    image: dcm4che/slapd-dcm4chee:2.6.10-34.3
+    container_name: dcm4chee-ldap
+    restart: unless-stopped
+    environment:
+      ARCHIVE_HOST: dcm4chee
+      STORAGE_DIR: /storage/fs1
+    volumes:
+      - ldap_data:/var/lib/openldap/openldap-data
+      - slapd_config:/etc/openldap/slapd.d
+    ports:
+      - "389:389"
+      - "636:636"
+    networks:
+      - pacsnet
+
+  db:
+    image: dcm4che/postgres-dcm4chee:17.4-34
+    container_name: dcm4chee-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: pacsdb
+      POSTGRES_USER: pacs
+      POSTGRES_PASSWORD: pacs
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - pacsnet
+
+  dcm4chee:
+    image: dcm4che/dcm4chee-arc-psql:5.34.3
+    container_name: dcm4chee
+    restart: unless-stopped
+    depends_on:
+      - ldap
+      - db
+    environment:
+      WILDFLY_ADMIN_USER: admin
+      WILDFLY_ADMIN_PASSWORD: admin
+      WILDFLY_DEPLOY_UI: "true"
+      WILDFLY_PACSDS_USE_CCM: "false"
+
+      POSTGRES_DB: pacsdb
+      POSTGRES_USER: pacs
+      POSTGRES_PASSWORD: pacs
+
+      WILDFLY_CHOWN: /storage
+      WILDFLY_WAIT_FOR: ldap:389 db:5432
+      JAVA_OPTS: >-
+        -Xms512m -Xmx2g
+        -Djava.net.preferIPv4Stack=true
+        -Djava.awt.headless=true
+        -Ddcm4chee-arc.cors.allowed-origins=*
+        -Ddcm4chee-arc.cors.allowed-methods=GET,POST,PUT,DELETE,OPTIONS
+        -Ddcm4chee-arc.cors.allowed-headers=origin,content-type,accept,authorization
+    volumes:
+      - wildfly_data:/opt/wildfly/standalone
+      - storage_data:/storage
+    ports:
+      - "8080:8080"     # HTTP
+      - "8443:8443"     # HTTPS
+      - "11112:11112"   # DICOM
+      - "2575:2575"     # HL7
+      - "2762:2762"     # SYSLOG/Audit (si luego lo ocupás)
+      - "9990:9990"     # WildFly mgmt
+    networks:
+      - pacsnet
+
+  ohif:
+    image: ohif/app:latest
+    container_name: ohif
+    restart: unless-stopped
+    depends_on:
+      - dcm4chee
+    ports:
+      - "3000:80"
+    volumes:
+      - ./ohif/app-config.js:/usr/share/nginx/html/app-config.js
+      - ./ohif/logo.png:/usr/share/nginx/html/logo.png
+      - ./ohif/custom.css:/usr/share/nginx/html/custom.css
+      - ./ohif/custom.js:/usr/share/nginx/html/custom.js
+    networks:
+      - pacsnet
+
+volumes:
+  ldap_data:
+  slapd_config:
+  db_data:
+  wildfly_data:
+  storage_data:
+
+networks:
+  pacsnet:
+    driver: bridge
