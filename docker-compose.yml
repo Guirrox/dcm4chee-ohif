@@ -25,6 +25,8 @@ services:
       POSTGRES_PASSWORD: pacs
     volumes:
       - db_data:/var/lib/postgresql/data
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
     ports:
       - "5432:5432"
     networks:
@@ -59,6 +61,8 @@ services:
     volumes:
       - wildfly_data:/opt/wildfly/standalone
       - storage_data:/storage
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
     ports:
       - "8080:8080"     # HTTP
       - "8443:8443"     # HTTPS
